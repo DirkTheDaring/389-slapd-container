@@ -1,2 +1,2 @@
 #!/bin/sh
-docker  build .
+docker  build . -t images.fedora-25-full.ldap-small

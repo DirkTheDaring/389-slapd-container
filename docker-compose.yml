@@ -1,0 +1,34 @@
+---
+version: '2'
+
+services:
+  ldap-small:
+    image: images.fedora-25-full.ldap-small
+    restart: unless-stopped
+    container_name: ldap-small
+
+    tty: true
+    #privileged: true
+    cap_add:
+    - SYS_ADMIN
+    - SYS_PTRACE
+
+    security_opt:
+    - seccomp:unconfined
+
+    environment:
+      FQDN: 'nanopi.fritz.box'
+      #USERS_LDIF_FILE: "/etc/slapd.ldif"
+      DEBUG_LEVEL: 1
+      #CA_CERT_FILE: /etc/pki/ca-trust/source/anchors/self_signed_certificate.crt
+      #CERT_FILE:    /etc/pki/tls/certs/baldur.fritz.box.crt
+      #KEY_FILE:     /etc/pki/tls/private/baldur.fritz.box.key
+
+    network_mode: host
+
+    #volumes:
+      #- ${CLOUD_ROOT_DIR}/ldap-small.${DOMAIN}/../share/public:/public
+      #- /root/docker/app/ldap-small/slapd.ldif:/etc/slapd.ldif
+      #- /etc/pki/ca-trust/source/anchors/self_signed_certificate.crt:/etc/pki/ca-trust/source/anchors/self_signed_certificate.crt:ro
+      #- /var/cloud/puppetmaster4.prod.cloud/etc/puppet/nodes/certificates/baldur.fritz.box.crt:/etc/pki/tls/certs/baldur.fritz.box.crt:ro
+      #- /var/cloud/puppetmaster4.prod.cloud/etc/puppet/nodes/certificates/baldur.fritz.box.key:/etc/pki/tls/private/baldur.fritz.box.key:ro
