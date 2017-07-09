@@ -2,6 +2,8 @@
 DEBUG_LEVEL=${DEBUG_LEVEL:=0}
 # "suggest" install standard setup
 USERS_LDIF_FILE=${USERS_LDIF_FILE:="suggest"}
+PATH=$PATH:/cnt/bin
+
 
 function show_help
 {
@@ -178,16 +180,14 @@ CADMIN_PW=$ADMIN_PASSWORD
 SADMIN_PW=$ADMIN_PASSWORD
 DM_PASS=$PASSWORD
 
-DSE_CONFIG_FILE=/turn-on-ssl-encryption.ldif
-
 if [ ! -d "/etc/dirsrv/slapd-$SERVER_ID" ]; then
-  dump_setup_inf >setup-ds.inf
+  dump_setup_inf >/cnt/setup-ds.inf
 
   if [ $DEBUG_LEVEL != 0 ]; then
 	DEBUGARG="--debug"
   fi 
 
-  setup-ds.pl --silent $DEBUGARG --logfile /dev/stdout --file setup-ds.inf
+  setup-ds.pl --silent $DEBUGARG --logfile /dev/stdout --file /cnt/setup-ds.inf
 
   # It makes no sense to log in the container - only for debugging, so make it optional
   DSE_LDIF_FILE=/etc/dirsrv/slapd-$SERVER_ID/dse.ldif
@@ -203,33 +203,28 @@ if [ ! -d "/etc/dirsrv/slapd-$SERVER_ID" ]; then
     sed -i.orig1 's/^nsslapd-errorlog-logging-enabled: on/nsslapd-errorlog-logging-enabled: off/'   $DSE_LDIF_FILE
   fi
 
-  #LINE_NO=$(grep -n "^dn: cn=MemberOf Plugin,cn=plugins,cn=config" dse.ldif |cut -f1 -d:)
-  #sed -i.orig2 's//'   $DSE_LDIF_FILE
-  
+  bash -x certs.sh $SERVER_ID
 
-  #echo $DSE_LDIF_FILE
-  #sed -i.patch1 '/^objectClass: nsslapdConfig/a nsslapd-security: on\nnsslapd-ssl-check-hostname: off\nnsslapd-secureport: 636' $DSE_LDIF_FILE
-  #sed -i.patch2 '/^cn: encryption/a nsSSL2: off\nnsSSL3: off\nnsTLS1: on\nnsSSLClientAuth: allowed' $DSE_LDIF_FILE
-  #cat $DSE_LDIF_FILE
-
-  bash -x /certs.sh $SERVER_ID
+  turn-on-memberof-plugin.sh $DSE_LDIF_FILE
   LOG_FILE=/tmp/log
-  /usr/sbin/ns-slapd -D "/etc/dirsrv/slapd-$SERVER_ID" -i "/var/run/dirsrv/slapd-$SERVER_ID.pid" -d 0 &
-  sleep 3
-  CERT_NICK=$(certutil -d /etc/dirsrv/slapd-$SERVER_ID  -L |grep 'u,u,u$' |sed -r 's/[ ]+u,u,u$//')
-  sed -i.orig "s/^nsSSLPersonalitySSL:.*$/nsSSLPersonalitySSL: $CERT_NICK/"  /turn-on-ssl-encryption.ldif
-  ldapmodify -x -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW </turn-on-ssl-encryption.ldif
-  ldapmodify -x -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW </turn-on-memberof-plugin.ldif
-  PID=$(cat "/var/run/dirsrv/slapd-$SERVER_ID.pid")
-  kill -TERM $PID
-  wait $PID
 
+  touch $LOG_FILE
+  chmod 777 $LOG_FILE
+  tail -f $LOG_FILE >/dev/stdout &
   /usr/sbin/ns-slapd -D "/etc/dirsrv/slapd-$SERVER_ID" -i "/var/run/dirsrv/slapd-$SERVER_ID.pid" -d 0 2>$LOG_FILE &
-
   sleep 3
-  sed -i.orig "s/basedn:.*$/basedn: $SUFFIX/" /fix-member-of-task.ldif
-  ldapadd -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW -f /fix-member-of-task.ldif
 
+  CERT_NICK=$(certutil -d /etc/dirsrv/slapd-$SERVER_ID  -L |grep 'u,u,u$' |sed -r 's/[ ]+u,u,u$//')
+  # SSL Encryption
+  sed -i""  "s/^nsSSLPersonalitySSL:.*$/nsSSLPersonalitySSL: $CERT_NICK/"  /cnt/ldif/turn-on-ssl-encryption.ldif
+  ldapmodify -x -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW </cnt/ldif/turn-on-ssl-encryption.ldif
+  # End SSL Encryption
+
+  # Update Membership
+  sed -i.orig "s/basedn:.*$/basedn: $SUFFIX/" /cnt/ldif/fix-member-of-task.ldif
+  ldapadd -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW -f /cnt/ldif/fix-member-of-task.ldif
+
+  # Wait for completion of update
   while true; do
     grep -m 1 "memberof-plugin - Memberof task finished" "$LOG_FILE" >/dev/null
     RET=$?
@@ -238,16 +233,19 @@ if [ ! -d "/etc/dirsrv/slapd-$SERVER_ID" ]; then
     fi 
     sleep 0.3
   done  
+
   PID=$(cat "/var/run/dirsrv/slapd-$SERVER_ID.pid")
   kill -TERM $PID
   wait $PID
-  cat "$LOG_FILE"
-  rm -f "$LOG_FILE"
 
-  #cat /fix-member-of-task.ldif >>$DSE_LDIF_FILE
+
+  rm -f "$LOG_FILE"
+  # kill remaining childs (should be tail -f )
+  kill -TERM $(jobs -p) 
+
 else 
   # Refresh always
-  /certs.sh $SERVER_ID
+  certs.sh $SERVER_ID
 fi
 
 

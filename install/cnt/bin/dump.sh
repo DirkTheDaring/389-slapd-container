@@ -1,5 +1,5 @@
 #!/bin/sh
-SETUP_FILE=setup-ds.inf
+SETUP_FILE=/cnt/setup-ds.inf
 FILE=$1
 
 if [ ! -f "$SETUP_FILE" ]; then

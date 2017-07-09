@@ -1,4 +1,5 @@
 FROM centos
+# MIT License
 
 # Ideas from https://github.com/jtgasper3/docker-images/blob/master/389-ds/Dockerfile
 
@@ -25,9 +26,8 @@ RUN cd /usr/lib64/dirsrv/perl\
  && sed -i.orig2 '/if (@errs = startServer($inf))/,/}/d' DSCreate.pm \
  && sed -i.orig3 's:/bin/systemctl --system daemon-reload:/bin/echo /bin/systemctl --system daemon-reload:g' DSCreate.pm
 
-COPY install/*.sh /
-COPY install/*.ldif  /
+ADD install/cnt/ /cnt/
 
-CMD  [ "/init.sh" ]
+CMD  [ "/cnt/init.sh" ]
 
 EXPOSE 389 636
