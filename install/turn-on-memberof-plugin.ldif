@@ -1,0 +1,11 @@
+dn: cn=MemberOf Plugin,cn=plugins,cn=config
+changetype: modify
+replace: nsslapd-pluginEnabled
+nsslapd-pluginEnabled: on
+-
+replace: memberofgroupattr
+memberofgroupattr: uniqueMember
+-
+replace: memberofattr
+memberofattr: memberOf
+-

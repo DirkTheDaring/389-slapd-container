@@ -1,0 +1,5 @@
+dn: cn=memberOf_fixup_2017_7_8_10_39_49, cn=memberOf task, cn=tasks, cn=config
+objectclass: top
+objectclass: extensibleObject
+cn: memberOf_fixup_2017_7_8_10_39_49
+basedn: dc=example,dc=com
