@@ -133,6 +133,24 @@ ServerAdminPwd=$SADMIN_PW
 EOF
 }
 
+function wait_for_log_entry
+{
+  local LOG_FILE=$1
+  local ENTRY=$2
+
+  # Wait for completion of update
+  while true; do
+    grep -m 1 "$ENTRY" "$LOG_FILE" >/dev/null
+    RET=$?
+    if [ $RET == 0 ]; then 
+      break
+    fi 
+    sleep 0.3
+  done  
+}
+
+
+
 parse_cmdline "$@"
 
 if [ -z "$FQDN" ]; then
@@ -204,6 +222,7 @@ if [ ! -d "/etc/dirsrv/slapd-$SERVER_ID" ]; then
   fi
 
   bash -x certs.sh $SERVER_ID
+  CERT_SUCCESS=$?
 
   turn-on-memberof-plugin.sh $DSE_LDIF_FILE
   LOG_FILE=/tmp/log
@@ -212,27 +231,22 @@ if [ ! -d "/etc/dirsrv/slapd-$SERVER_ID" ]; then
   chmod 777 $LOG_FILE
   tail -f $LOG_FILE >/dev/stdout &
   /usr/sbin/ns-slapd -D "/etc/dirsrv/slapd-$SERVER_ID" -i "/var/run/dirsrv/slapd-$SERVER_ID.pid" -d 0 2>$LOG_FILE &
-  sleep 3
+  
+  wait_for_log_entry "$LOG_FILE" "slapd started."
 
-  CERT_NICK=$(certutil -d /etc/dirsrv/slapd-$SERVER_ID  -L |grep 'u,u,u$' |sed -r 's/[ ]+u,u,u$//')
-  # SSL Encryption
-  sed -i""  "s/^nsSSLPersonalitySSL:.*$/nsSSLPersonalitySSL: $CERT_NICK/"  /cnt/ldif/turn-on-ssl-encryption.ldif
-  ldapmodify -x -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW </cnt/ldif/turn-on-ssl-encryption.ldif
-  # End SSL Encryption
+  if [ $CERT_SUCCESS == 0 ]; then 
+    CERT_NICK=$(certutil -d /etc/dirsrv/slapd-$SERVER_ID  -L |grep 'u,u,u$' |sed -r 's/[ ]+u,u,u$//')
+    # SSL Encryption
+    sed -i""  "s/^nsSSLPersonalitySSL:.*$/nsSSLPersonalitySSL: $CERT_NICK/"  /cnt/ldif/turn-on-ssl-encryption.ldif
+    ldapmodify -x -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW </cnt/ldif/turn-on-ssl-encryption.ldif
+    # End SSL Encryption
+  fi 
 
   # Update Membership
   sed -i.orig "s/basedn:.*$/basedn: $SUFFIX/" /cnt/ldif/fix-member-of-task.ldif
   ldapadd -h localhost -p 389 -D "cn=Directory Manager" -w $CADMIN_PW -f /cnt/ldif/fix-member-of-task.ldif
 
-  # Wait for completion of update
-  while true; do
-    grep -m 1 "memberof-plugin - Memberof task finished" "$LOG_FILE" >/dev/null
-    RET=$?
-    if [ $RET == 0 ]; then 
-      break
-    fi 
-    sleep 0.3
-  done  
+  wait_for_log_entry "$LOG_FILE" "memberof-plugin - Memberof task finished"
 
   PID=$(cat "/var/run/dirsrv/slapd-$SERVER_ID.pid")
   kill -TERM $PID
